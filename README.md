@@ -6,26 +6,26 @@ Windows cursor routing for NovaStar H Series / H2 video-wall layouts.
 
 ## Download
 
-Latest release: [v0.1.6](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.6)
+Latest release: [v0.1.7](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.7)
 
 | Asset | Use when |
 |---|---|
-| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.6/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
-| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.6/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
+| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.7/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
+| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.7/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
 
 The installer and executable are not code-signed yet. Microsoft Defender SmartScreen may show an unknown publisher warning.
 
-## What's New In v0.1.6
+## What's New In v0.1.7
 
-This release improves display naming for field layouts with multiple Windows displays.
+This release adds field diagnostics for Windows display remapping without changing routing behavior.
 
-- Display aliases can be edited from the Displays tab.
-- Aliases are shown in the display preview, layout canvas, Add Display list, layout summaries, and Identify overlays.
-- Original Windows display IDs are preserved internally for routing and monitor rebinding.
-- Saved display history distinguishes connected displays from displays that are not currently detected.
-- Refreshing detected displays preserves aliases and aliasless display history.
+- Display refresh logs now include source, target, connector, EDID, friendly name, and monitor device path details when Windows provides them.
+- The app logs possible display remaps when a saved layout rectangle matches a different current `DISPLAYx` name.
+- Runtime refreshes can also log when the same rectangle appears under a different `DISPLAYx` since the previous refresh.
+- Existing layouts, profiles, aliases, and routing behavior are not automatically changed by these diagnostics.
+- Existing `%AppData%\vp-cursor-portal\config.json` files remain compatible.
 
-Full release notes: [docs/releases/v0.1.6.md](docs/releases/v0.1.6.md)
+Full release notes: [docs/releases/v0.1.7.md](docs/releases/v0.1.7.md)
 
 ## Why This Exists
 
@@ -176,6 +176,7 @@ docs/releases/
   v0.1.4.md
   v0.1.5.md
   v0.1.6.md
+  v0.1.7.md
 ```
 
 Development architecture notes, diagrams, test guidance, publishing details, and release checklist are kept in [docs/development.md](docs/development.md).
