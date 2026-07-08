@@ -37,6 +37,7 @@ public sealed class MainViewModel : ViewModelBase
     private bool _startWithWindows;
     private CursorPoint? _selectedLayoutDraftStartPosition;
     private string _lastLoggedMonitorSignature = "";
+    private MonitorSnapshot[] _lastLoggedMonitorSnapshot = [];
     private bool _suppressDisplayAliasUpdates;
 
     public MainViewModel(
@@ -1196,8 +1197,15 @@ public sealed class MainViewModel : ViewModelBase
             var monitorSignature = BuildMonitorSignature();
             if (!string.Equals(monitorSignature, _lastLoggedMonitorSignature, StringComparison.Ordinal))
             {
+                var currentSnapshot = BuildMonitorSnapshot();
                 _lastLoggedMonitorSignature = monitorSignature;
                 AddLog($"Detected {Monitors.Count} active display(s): {monitorSignature}");
+                foreach (var message in BuildPotentialDisplayRemapMessages(currentSnapshot))
+                {
+                    AddLog(message);
+                }
+
+                _lastLoggedMonitorSnapshot = currentSnapshot;
             }
             else
             {
@@ -1803,7 +1811,93 @@ public sealed class MainViewModel : ViewModelBase
     private string BuildMonitorSignature() =>
         Monitors.Count == 0
             ? "none"
-            : string.Join("; ", Monitors.Select(monitor => $"{monitor.DeviceName} {monitor.BoundsText}"));
+            : string.Join("; ", Monitors.Select(FormatMonitorForDiagnostics));
+
+    private MonitorSnapshot[] BuildMonitorSnapshot() =>
+        Monitors
+            .Select(monitor => new MonitorSnapshot(
+                monitor.DeviceName,
+                monitor.Left,
+                monitor.Top,
+                monitor.Right,
+                monitor.Bottom))
+            .ToArray();
+
+    private IEnumerable<string> BuildPotentialDisplayRemapMessages(MonitorSnapshot[] currentSnapshot)
+    {
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var previous in _lastLoggedMonitorSnapshot)
+        {
+            var current = currentSnapshot.FirstOrDefault(monitor =>
+                monitor.Left == previous.Left &&
+                monitor.Top == previous.Top &&
+                monitor.Right == previous.Right &&
+                monitor.Bottom == previous.Bottom);
+            if (current is null ||
+                string.Equals(current.DeviceName, previous.DeviceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var key = $"runtime|{previous.BoundsText}|{previous.DeviceName}|{current.DeviceName}";
+            if (emitted.Add(key))
+            {
+                yield return
+                    $"Possible display remap detected since previous refresh: {previous.DeviceName} {previous.BoundsText} now appears as {current.DeviceName}. No layout changes were applied.";
+            }
+        }
+
+        foreach (var zone in Zones.Where(zone => zone.IsVisible))
+        {
+            var current = currentSnapshot.FirstOrDefault(monitor =>
+                monitor.Left == zone.WindowsLeft &&
+                monitor.Top == zone.WindowsTop &&
+                monitor.Right == zone.WindowsRight &&
+                monitor.Bottom == zone.WindowsBottom);
+            if (current is null ||
+                string.Equals(
+                    MonitorZoneMatcher.NormalizeZoneId(current.DeviceName),
+                    MonitorZoneMatcher.NormalizeZoneId(zone.Id),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var boundsText = $"{zone.WindowsLeft},{zone.WindowsTop} -> {zone.WindowsRight},{zone.WindowsBottom}";
+            var key = $"saved|{boundsText}|{zone.Id}|{current.DeviceName}";
+            if (emitted.Add(key))
+            {
+                yield return
+                    $"Possible saved layout display remap detected: saved {zone.Id} {boundsText} now matches {current.DeviceName}. No layout changes were applied.";
+            }
+        }
+    }
+
+    private static string FormatMonitorForDiagnostics(MonitorRow monitor)
+    {
+        var identity = monitor.Identity;
+        if (identity is null)
+        {
+            return $"{monitor.DeviceName} {monitor.BoundsText} diag=unavailable";
+        }
+
+        var friendlyName = string.IsNullOrWhiteSpace(identity.MonitorFriendlyName) ? "unknown" : identity.MonitorFriendlyName;
+        var devicePath = string.IsNullOrWhiteSpace(identity.MonitorDevicePath) ? "unknown" : identity.MonitorDevicePath;
+        return
+            $"{monitor.DeviceName} {monitor.BoundsText} " +
+            $"diag=source={identity.SourceAdapterId}/{identity.SourceId}, " +
+            $"target={identity.TargetAdapterId}/{identity.TargetId}, " +
+            $"output={identity.OutputTechnology}, " +
+            $"connector={identity.ConnectorInstance}, " +
+            $"edid={identity.EdidManufactureId:X4}:{identity.EdidProductCodeId:X4}, " +
+            $"name=\"{friendlyName}\", " +
+            $"path=\"{devicePath}\"";
+    }
+
+    private sealed record MonitorSnapshot(string DeviceName, int Left, int Top, int Right, int Bottom)
+    {
+        public string BoundsText => $"{Left},{Top} -> {Right},{Bottom}";
+    }
 
     private static void Dispatch(Action action)
     {

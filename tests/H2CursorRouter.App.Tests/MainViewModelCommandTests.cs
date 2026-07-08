@@ -308,6 +308,36 @@ public sealed class MainViewModelCommandTests
         Assert.Equal("Main wall", zone.DisplayLabel);
     }
 
+    [Fact]
+    public void RefreshDisplaysLogsPossibleSavedLayoutRemapWithoutChangingLayout()
+    {
+        using var fixture = new MainViewModelFixture();
+        var layout = new CursorLayout(
+            "layout-1",
+            "Wall",
+            [new CursorZone(
+                "DISPLAY6",
+                "DISPLAY6",
+                new IntRect(0, 0, 100, 100),
+                new VisualRect(0, 0, 100, 100),
+                IsVisible: true)],
+            []);
+        var configuration = new AppConfiguration(
+            [],
+            [layout],
+            [],
+            SafetySettings.Default);
+        var topology = new MonitorTopologyStub([CreateMonitorInfo(@"\\.\DISPLAY8", 0, 0, 100, 100)]);
+        var viewModel = fixture.Create(configuration, topology);
+
+        viewModel.RefreshDisplays();
+
+        Assert.Contains(viewModel.Logs, log =>
+            log.Contains("Possible saved layout display remap detected", StringComparison.OrdinalIgnoreCase) &&
+            log.Contains("saved DISPLAY6 0,0 -> 100,100 now matches DISPLAY8", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("DISPLAY6", Assert.Single(viewModel.Zones).Id);
+    }
+
     private static ZoneRow CreateVisibleZone(string layoutId, string id, int left, int top, int right, int bottom) => new()
     {
         LayoutId = layoutId,

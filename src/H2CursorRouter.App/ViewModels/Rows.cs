@@ -535,6 +535,7 @@ public sealed class MonitorRow : ViewModelBase
     public int Right { get; init; }
     public int Bottom { get; init; }
     public bool IsPrimary { get; init; }
+    public MonitorIdentityInfo? Identity { get; init; }
     public double PreviewLeft
     {
         get => _previewLeft;
@@ -572,7 +573,8 @@ public sealed class MonitorRow : ViewModelBase
         Top = monitor.Bounds.Top,
         Right = monitor.Bounds.Right,
         Bottom = monitor.Bounds.Bottom,
-        IsPrimary = monitor.IsPrimary
+        IsPrimary = monitor.IsPrimary,
+        Identity = monitor.Identity
     };
 }
 

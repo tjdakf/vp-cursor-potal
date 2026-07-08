@@ -70,7 +70,8 @@ public sealed class Win32MonitorTopologyService : IMonitorTopologyService
                     top,
                     left + (int)sourceMode.SourceMode.Width,
                     top + (int)sourceMode.SourceMode.Height),
-                left == 0 && top == 0));
+                left == 0 && top == 0,
+                CreateIdentityInfo(path)));
         }
 
         return monitors;
@@ -118,6 +119,45 @@ public sealed class Win32MonitorTopologyService : IMonitorTopologyService
             ? sourceName.ViewGdiDeviceName.TrimEnd('\0')
             : $"DISPLAY{sourceId + 1}";
     }
+
+    private static MonitorIdentityInfo CreateIdentityInfo(DisplayConfigPathInfo path)
+    {
+        var targetName = GetTargetDeviceName(path.TargetInfo.AdapterId, path.TargetInfo.Id);
+        return new MonitorIdentityInfo(
+            FormatLuid(path.SourceInfo.AdapterId),
+            path.SourceInfo.Id,
+            FormatLuid(path.TargetInfo.AdapterId),
+            path.TargetInfo.Id,
+            path.TargetInfo.OutputTechnology,
+            targetName?.EdidManufactureId ?? 0,
+            targetName?.EdidProductCodeId ?? 0,
+            targetName?.ConnectorInstance ?? 0,
+            CleanNullTerminated(targetName?.MonitorFriendlyDeviceName),
+            CleanNullTerminated(targetName?.MonitorDevicePath));
+    }
+
+    private static DisplayConfigTargetDeviceName? GetTargetDeviceName(Luid adapterId, uint targetId)
+    {
+        var targetName = new DisplayConfigTargetDeviceName
+        {
+            Header = new DisplayConfigDeviceInfoHeader
+            {
+                Type = DisplayConfigDeviceInfoType.GetTargetName,
+                Size = (uint)Marshal.SizeOf<DisplayConfigTargetDeviceName>(),
+                AdapterId = adapterId,
+                Id = targetId
+            }
+        };
+
+        return DisplayConfigGetDeviceInfo(ref targetName) == ErrorSuccess
+            ? targetName
+            : null;
+    }
+
+    private static string FormatLuid(Luid luid) => $"{luid.HighPart:x8}:{luid.LowPart:x8}";
+
+    private static string CleanNullTerminated(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "" : value.TrimEnd('\0').Trim();
 
     private static IReadOnlyList<MonitorInfo> GetMonitorsFromMonitorHandles()
     {
@@ -197,6 +237,9 @@ public sealed class Win32MonitorTopologyService : IMonitorTopologyService
     private static extern int DisplayConfigGetDeviceInfo(ref DisplayConfigSourceDeviceName requestPacket);
 
     [DllImport("user32.dll")]
+    private static extern int DisplayConfigGetDeviceInfo(ref DisplayConfigTargetDeviceName requestPacket);
+
+    [DllImport("user32.dll")]
     private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr clipRect, MonitorEnumProc callback, IntPtr data);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
@@ -228,7 +271,8 @@ public sealed class Win32MonitorTopologyService : IMonitorTopologyService
 
     private enum DisplayConfigDeviceInfoType : uint
     {
-        GetSourceName = 1
+        GetSourceName = 1,
+        GetTargetName = 2
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -359,6 +403,23 @@ public sealed class Win32MonitorTopologyService : IMonitorTopologyService
 
         [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
         public string ViewGdiDeviceName;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DisplayConfigTargetDeviceName
+    {
+        public DisplayConfigDeviceInfoHeader Header;
+        public uint Flags;
+        public int OutputTechnology;
+        public ushort EdidManufactureId;
+        public ushort EdidProductCodeId;
+        public uint ConnectorInstance;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string MonitorFriendlyDeviceName;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string MonitorDevicePath;
     }
 
     [StructLayout(LayoutKind.Sequential)]
