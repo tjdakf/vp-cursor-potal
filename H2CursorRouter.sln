@@ -16,6 +16,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H2CursorRouter.H2.Tests", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H2CursorRouter.App.Tests", "tests\H2CursorRouter.App.Tests\H2CursorRouter.App.Tests.csproj", "{CA09CE17-EE74-4D2B-BB9A-4FF58C2696F8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H2CursorRouter.Updater", "src\H2CursorRouter.Updater\H2CursorRouter.Updater.csproj", "{054C7D50-EF52-4326-A389-4B3A563E6FF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "H2CursorRouter.Updater.Tests", "tests\H2CursorRouter.Updater.Tests\H2CursorRouter.Updater.Tests.csproj", "{75C0B8EB-4407-4C19-B6AF-34AD6186C379}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,5 +54,13 @@ Global
 		{CA09CE17-EE74-4D2B-BB9A-4FF58C2696F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CA09CE17-EE74-4D2B-BB9A-4FF58C2696F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CA09CE17-EE74-4D2B-BB9A-4FF58C2696F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{054C7D50-EF52-4326-A389-4B3A563E6FF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{054C7D50-EF52-4326-A389-4B3A563E6FF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{054C7D50-EF52-4326-A389-4B3A563E6FF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{054C7D50-EF52-4326-A389-4B3A563E6FF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{75C0B8EB-4407-4C19-B6AF-34AD6186C379}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75C0B8EB-4407-4C19-B6AF-34AD6186C379}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75C0B8EB-4407-4C19-B6AF-34AD6186C379}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75C0B8EB-4407-4C19-B6AF-34AD6186C379}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -24,6 +24,14 @@ dotnet publish src\H2CursorRouter.App\H2CursorRouter.App.csproj `
     --self-contained $SelfContained `
     --output $Output
 
+Write-Host "Publishing standalone update helper..."
+dotnet publish src\H2CursorRouter.Updater\H2CursorRouter.Updater.csproj `
+    --configuration $Configuration --runtime $Runtime --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:EnableCompressionInSingleFile=true --output artifacts\update-helper
+if ($LASTEXITCODE -ne 0) { throw "Update helper publish failed." }
+Copy-Item artifacts\update-helper\vp-cursor-portal-updater.exe (Join-Path $Output "vp-cursor-portal-updater.exe") -Force
+
 if ($BuildInstaller) {
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
     if (-not (Test-Path $iscc)) {

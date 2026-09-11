@@ -10,13 +10,14 @@
     <AssemblyName>vp-cursor-portal</AssemblyName>
     <Product>vp-cursor-portal</Product>
     <Description>Windows cursor routing and video processor preset control.</Description>
-    <Version>0.1.8</Version>
-    <AssemblyVersion>0.1.8.0</AssemblyVersion>
-    <FileVersion>0.1.8.0</FileVersion>
+    <Version>0.1.9</Version>
+    <AssemblyVersion>0.1.9.0</AssemblyVersion>
+    <FileVersion>0.1.9.0</FileVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\H2CursorRouter.Updater\H2CursorRouter.Updater.csproj" />
     <ProjectReference Include="..\H2CursorRouter.Core\H2CursorRouter.Core.csproj" />
     <ProjectReference Include="..\H2CursorRouter.H2\H2CursorRouter.H2.csproj" />
     <ProjectReference Include="..\H2CursorRouter.Windows\H2CursorRouter.Windows.csproj" />

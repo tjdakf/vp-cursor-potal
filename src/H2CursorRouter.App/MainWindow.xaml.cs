@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private bool _isInitialDashboardSelection = true;
     private bool _hideToTrayAfterFirstRender;
     private bool _restoreRequested;
+    private bool _exitForUpdate;
 
     public MainWindow(MainViewModel viewModel, IHotkeyService hotkeyService, bool startInTray)
     {
@@ -88,6 +89,11 @@ public partial class MainWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        if (!_exitForUpdate && _viewModel.Updates?.CanUseApp == false)
+        {
+            e.Cancel = true;
+            return;
+        }
         if (!_allowExit)
         {
             e.Cancel = true;
@@ -197,6 +203,13 @@ public partial class MainWindow : Window
         }
 
         Activate();
+    }
+
+    internal void ExitForUpdate()
+    {
+        _exitForUpdate = true;
+        _allowExit = true;
+        Close();
     }
 
     private void MinimizeButton_OnClick(object sender, RoutedEventArgs e)

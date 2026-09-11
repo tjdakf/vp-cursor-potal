@@ -20,10 +20,11 @@ This document keeps the development-oriented material that used to live in the R
 
 ## Current MVP Status
 
-This document describes the `v0.1.8` source and release procedure. See [release notes](releases/v0.1.8.md) for the change summary and validation limits.
+This document describes the `v0.1.9` source and release procedure. See [release notes](releases/v0.1.9.md) for the change summary and validation limits.
 
 | Status | Capability |
 |---|---|
+| Done | Installer update check/download/verification, settings flush, external install/relaunch |
 | Done | Single-instance startup gate and repeated-launch window restore |
 | Done | WPF desktop app targeting `.NET 10` / `net10.0-windows` |
 | Done | Separated Core, H2, Windows, App, and test projects |
@@ -73,23 +74,27 @@ docs/releases/
   v0.1.6.md
   v0.1.7.md
   v0.1.8.md
+  v0.1.9.md
 
 installer/inno/
   vp-cursor-portal.iss
 
 scripts/
   publish-windows.ps1
+  test-update-installation.ps1
 
 src/
   H2CursorRouter.Core/
   H2CursorRouter.H2/
   H2CursorRouter.Windows/
   H2CursorRouter.App/
+  H2CursorRouter.Updater/
 
 tests/
   H2CursorRouter.Core.Tests/
   H2CursorRouter.H2.Tests/
   H2CursorRouter.App.Tests/
+  H2CursorRouter.Updater.Tests/
 ```
 
 Files intentionally not tracked:
@@ -114,6 +119,7 @@ flowchart TB
     App --> Core
     App --> H2
     App --> Windows
+    App --> Updater["H2CursorRouter.Updater<br/>Release client and external update helper"]
     Windows --> Core
     H2 --> Core
     Tests --> Core
@@ -127,6 +133,7 @@ flowchart TB
 | `H2CursorRouter.H2` | NovaStar H2 UDP JSON commands and responses | UI state and cursor movement |
 | `H2CursorRouter.Windows` | Win32 cursor, monitor topology, hotkeys, startup registration | Business rules that belong in Core |
 | `H2CursorRouter.App` | WPF shell, composition, single-instance lifecycle, ViewModels, dialogs, user workflows | Geometry decisions that cannot be tested outside the UI |
+| `H2CursorRouter.Updater` | GitHub release validation, installer download, parent-process handoff, install and relaunch | Cursor control, configuration schema migration |
 | `tests/*` | Behavior coverage around routing, H2, mapping, XAML bindings, log policy | Real H2 devices or real cursor movement |
 
 ### `H2CursorRouter.Core`
@@ -258,6 +265,24 @@ Closing the window with **X** hides it to the tray. **Exit** stops routing, rele
 
 This guard is introduced in `v0.1.8`. Exit all older copies before upgrading; an already-running older binary does not participate in the new protocol. Copies in different privilege contexts may fail to exchange activation requests and show the fallback message instead.
 
+## Installer Updates
+
+The **Settings** tab exposes `UpdateViewModel`: manual checking, optional startup checking (default off), release notes, download progress/cancellation, and installation. `v0.1.9` must first be installed manually to receive this capability.
+
+- `GitHubUpdateClient` reads the public `tjdakf/vp-cursor-portal` latest-release endpoint without credentials. Only a newer stable numeric version is offered. Draft/prerelease entries are ignored.
+- Installation requires the exact uploaded installer asset from this repository and tag, a valid GitHub SHA-256 digest, and the expected byte count. Downloads go to a unique directory below `%LocalAppData%\vp-cursor-portal\updates`. Partial or mismatched downloads are not executed.
+- Only the registered Inno Setup installation path qualifies for automatic installation. Portable/development copies still support checking. Registry registration is checked again by the helper.
+- The final handoff disables UI editing, prevents new profile execution/autosaves, drains pending profile execution and configuration writes, saves the final configuration snapshot, and stops routing. Validation/save errors abort handoff.
+- The standalone self-contained `vp-cursor-portal-updater.exe` is copied out of the installation directory before it runs. Its request includes the parent PID and start timestamp. It acknowledges readiness and waits for that exact process to exit before installing.
+- The helper checks the installer hash again while keeping the file open without write sharing. Inno Setup requests elevation itself; the helper stays in the original user context and handles relaunch.
+- Setup uses `/SILENT`, `/NORESTART`, `/NORESTARTAPPLICATIONS`, `/NOCLOSEAPPLICATIONS`, `/APPUPDATE`, and the registered destination directory. It does not force-close another application's files or reboot Windows. `/APPUPDATE` suppresses the normal post-install launch entry; the helper owns the one relaunch attempt.
+- Cancellation at UAC or an installer failure is reported, then the helper attempts to reopen the installed app. Binaries are not rolled back. Installer reboot-required status is reported instead of silently treating it as a finished replacement.
+- Settings stay in AppData. No backup or configuration migration is introduced. An update check preference is stored separately in `update-settings.json`. Startup cleans update download folders older than seven days; installer/error logs remain available in newer update folders.
+
+The release pipeline separately publishes the helper as a compressed self-contained Windows x64 single-file executable and places it in the app folder before packaging. `scripts/publish-windows.ps1` does the same for local publishing.
+
+`test-update-installation.ps1` runs only on isolated Windows GitHub Actions runners. It tests install/reinstall with configuration-byte preservation, waits for a parent-process handoff, executes the real update helper, checks retained device settings and installed version, and requires a successful relaunch request. It does not establish visible WPF interaction, UAC consent behavior, or real cursor/H2 operation.
+
 ## Runtime Configuration
 
 Runtime data is per-user:
@@ -292,7 +317,7 @@ Clean install behavior:
 - no profiles,
 - routing disabled.
 
-The app writes `config.json` only when save or auto-save succeeds. ZIP replacement or installer upgrade should not overwrite existing user config.
+Configuration writes first serialize to a unique temporary file beside `config.json`, then replace the destination after serialization and flush complete. Cancelled or incomplete writes do not truncate the previous file. No persistent backup file is created. ZIP replacement or installer upgrade should not overwrite existing user config.
 
 ## Profile Execution Flow
 
@@ -509,15 +534,16 @@ The workflow:
 3. builds,
 4. tests,
 5. publishes a self-contained Windows x64 app,
-6. builds the Inno Setup installer,
-7. uploads artifacts.
+6. publishes the standalone update helper and builds the Inno Setup installer,
+7. verifies real installer update/configuration preservation on the isolated runner,
+8. uploads artifacts.
 
 | Artifact | Contains |
 |---|---|
 | `vp-cursor-portal-win-x64` | Portable self-contained app folder |
 | `vp-cursor-portal-setup` | Program Files installer |
 
-GitHub Release assets are uploaded only for tags like `v0.1.8`.
+GitHub Release assets are uploaded only for tags like `v0.1.9`.
 
 ## Release Checklist
 
@@ -531,8 +557,8 @@ Automated release checks:
 6. Create and push the new tag on that tested commit, for example:
 
 ```bash
-git tag v0.1.8
-git push origin v0.1.8
+git tag v0.1.9
+git push origin v0.1.9
 ```
 
 7. Wait for the tag workflow to succeed. Verify that the published release contains both the installer and ZIP, is marked latest, and that README download links work.
@@ -544,11 +570,12 @@ Manual Windows/field checks must be recorded separately from automated CI result
 - Confirm only one controller remains and that existing routing/configuration is not reset by a duplicate launch.
 - Exit/relaunch and restart after an unexpected process exit.
 - Emergency unlock, H2 communication, and actual multi-monitor routing on the target PC.
+- User-driven update through Settings, UAC approval/cancellation, and visible relaunch as the original user.
 - Preservation of existing `%AppData%\vp-cursor-portal\config.json` during upgrade.
 
 If these manual checks have not been performed, state that in the release notes; a successful workflow does not establish field verification.
 
-For version tags, the release body is read from `docs/releases/<tag>.md`, for example `docs/releases/v0.1.8.md`.
+For version tags, the release body is read from `docs/releases/<tag>.md`, for example `docs/releases/v0.1.9.md`.
 
 ## Code Signing And SmartScreen
 
@@ -592,7 +619,8 @@ Avoid:
 |---|---|
 | `H2CursorRouter.Core.Tests` | Cursor routing decisions, hidden/outside-zone rejection, portal selection, full-edge and segmented mapping, validation, profile planning |
 | `H2CursorRouter.H2.Tests` | Command serialization, ACK parsing, malformed responses, fake UDP integration cases |
-| `H2CursorRouter.App.Tests` | Row/config mapping, profile execution service, layout editing helpers, monitor-zone matching, XAML binding surface, log retention/noise policy, MainViewModel facade behavior, single-instance ownership and activation IPC |
+| `H2CursorRouter.Updater.Tests` | Stable version comparison, asset provenance, checksums/size, cancelled/failed downloads, installer arguments |
+| `H2CursorRouter.App.Tests` | Row/config mapping, profile execution service, layout editing helpers, monitor-zone matching, XAML binding surface, log retention/noise policy, MainViewModel facade behavior, single-instance ownership and activation IPC, update UI state, preference persistence and pre-update save |
 
 ```mermaid
 flowchart LR

@@ -59,7 +59,7 @@
             </Grid>
         </Border>
 
-        <TabControl x:Name="MainTabs" Grid.Row="2" Margin="0" TabStripPlacement="Left" SelectionChanged="MainTabs_OnSelectionChanged">
+        <TabControl x:Name="MainTabs" Grid.Row="2" Margin="0" TabStripPlacement="Left" IsEnabled="{Binding Updates.CanUseApp, FallbackValue=True, TargetNullValue=True}" SelectionChanged="MainTabs_OnSelectionChanged">
             <TabItem Header="Dashboard">
                 <Grid Margin="2">
                         <Grid.ColumnDefinitions>
@@ -549,6 +549,29 @@
                         </DockPanel>
                     </Border>
                 </Grid>
+            </TabItem>
+
+            <TabItem Header="Settings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Border Style="{StaticResource CardStyle}" Margin="2" VerticalAlignment="Top">
+                        <StackPanel>
+                            <TextBlock Text="Software Update" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBlock Text="{Binding Updates.CurrentVersion, StringFormat=Current version: {0}}" Margin="0,8,0,4" />
+                            <TextBlock Text="{Binding Updates.LatestVersion, StringFormat=Available update: {0}}" Margin="0,0,0,16" />
+                            <CheckBox Content="Check for updates when the app starts" IsChecked="{Binding Updates.CheckOnStartup}" Margin="0,0,0,16" />
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <Button Content="Check for Updates" Command="{Binding Updates.CheckCommand}" Style="{StaticResource SecondaryButtonStyle}" />
+                                <Button Content="Install Update" Command="{Binding Updates.InstallCommand}" />
+                                <Button Content="Cancel" Command="{Binding Updates.CancelCommand}" Style="{StaticResource SecondaryButtonStyle}" />
+                            </StackPanel>
+                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Updates.DownloadProgress}" Height="8" Margin="0,0,0,12" />
+                            <TextBlock Text="{Binding Updates.Status}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                            <TextBlock Text="{Binding Updates.InstallationNotice}" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,20" />
+                            <TextBlock Text="Release Notes" Style="{StaticResource SectionTitleStyle}" />
+                            <TextBox Text="{Binding Updates.ReleaseNotes, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="140" MaxHeight="360" VerticalScrollBarVisibility="Auto" />
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
             </TabItem>
 
             <TabItem Header="Advanced">

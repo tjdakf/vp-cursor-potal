@@ -1,6 +1,6 @@
 #define MyAppName "vp-cursor-portal"
 #ifndef MyAppVersion
-#define MyAppVersion "0.1.8"
+#define MyAppVersion "0.1.9"
 #endif
 #define MyAppPublisher "vp-cursor-portal contributors"
 #define MyAppExeName "vp-cursor-portal.exe"
@@ -42,9 +42,19 @@ Name: "{group}\vp-cursor-portal"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\vp-cursor-portal"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch vp-cursor-portal"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\{#MyAppExeName}"; Description: "Launch vp-cursor-portal"; Flags: nowait postinstall skipifsilent runasoriginaluser; Check: not IsAppUpdate
 
 [Code]
+function IsAppUpdate(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/APPUPDATE') = 0 then
+      Result := True;
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;

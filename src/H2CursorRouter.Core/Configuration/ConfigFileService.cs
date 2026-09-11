@@ -33,9 +33,24 @@ public sealed class ConfigFileService
             throw new InvalidOperationException($"Cannot save invalid configuration: {string.Join("; ", validation.Errors)}");
         }
 
-        await using var stream = File.Create(path);
-        var document = ConfigDocument.FromRuntime(configuration);
-        await JsonSerializer.SerializeAsync(stream, document, Options, cancellationToken);
+        // Replace only after the entire new document has been written. No backup copy is created.
+        var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, true))
+            {
+                var document = ConfigDocument.FromRuntime(configuration);
+                await JsonSerializer.SerializeAsync(stream, document, Options, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporaryPath, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+        }
     }
 
     public static JsonSerializerOptions CreateOptions()

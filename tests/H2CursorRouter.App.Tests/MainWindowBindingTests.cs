@@ -136,6 +136,7 @@ public sealed class MainWindowBindingTests
     [InlineData("ValidationErrors")]
     [InlineData("Logs")]
     [InlineData("AppVersion")]
+    [InlineData("Updates")]
     [InlineData("AppDescription")]
     [InlineData("AppLicenseSummary")]
     [InlineData("ConfigPath")]

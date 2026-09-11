@@ -6,25 +6,40 @@ Windows cursor routing for NovaStar H Series / H2 video-wall layouts.
 
 ## Download
 
-Latest release: [v0.1.8](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.8)
+Latest release: [v0.1.9](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.9)
 
 | Asset | Use when |
 |---|---|
-| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.8/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
-| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.8/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
+| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.9/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
+| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.9/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
 
 The installer and executable are not code-signed yet. Microsoft Defender SmartScreen may show an unknown publisher warning.
 
-## What's New In v0.1.8
+## What's New In v0.1.9
 
-This release prevents duplicate launches from competing for hotkeys, cursor control, and configuration writes.
+The installer edition can now check for updates and install a new version from **Settings**.
 
-- Only one instance runs per Windows user session, including installed and portable copies.
-- Launching the app again requests that the existing window reopen, including from the tray or a minimized state.
-- Requests received during startup are retained until the window is ready.
-- Existing `%AppData%\vp-cursor-portal\config.json` files remain compatible.
+- **Check for Updates** shows the new version and release notes.
+- **Install Update** downloads and checks the installer, saves current settings, closes the app, installs the update, and reopens the app after Windows permission approval.
+- Optional startup update checking is off by default. Installation always requires clicking **Install Update**.
+- Existing devices, layouts, profiles, aliases, and preferences are preserved. The app restarts with routing disabled.
+- Configuration saves now replace the existing file only after writing the complete new document; no separate backup is created.
 
-Full release notes: [docs/releases/v0.1.8.md](docs/releases/v0.1.8.md)
+Full release notes: [docs/releases/v0.1.9.md](docs/releases/v0.1.9.md)
+
+## Updating From Inside The App
+
+Install `v0.1.9` manually once to get this feature; `v0.1.8` and older do not have in-app updating. Future installer releases can use this flow:
+
+1. Open **Settings → Check for Updates**.
+2. Review the available version and release notes, then click **Install Update**.
+3. Keep using the app while the download completes, or cancel the download. Once the installer is verified, editing is briefly disabled while settings are saved and routing is stopped.
+4. Approve the Windows permission prompt. Installation runs with a progress window and the new version opens automatically.
+5. Your saved configuration is loaded. Run the desired profile to enable routing again.
+
+If downloading or verification fails, the app remains open. If the Windows permission prompt is cancelled, the helper reports the cancellation and reopens the app. Installation failures are reported with a log location; the helper attempts to reopen the installed app, but does not roll back application binaries. Saved configuration is not deleted by the installer.
+
+Automatic installation is available only when the running directory matches the installer registration. Portable ZIP and development copies can check for new releases, but must be updated manually. An Internet connection to GitHub is required only for checking and downloading updates.
 
 ## Install And Update
 
@@ -35,7 +50,7 @@ To update an existing installation:
 1. Stop routing and choose **Exit** from every running copy's system-tray menu. The window's **X** button only hides it to the tray. Older versions can still run in parallel until you exit them.
 2. Back up `%AppData%\vp-cursor-portal\config.json` if it contains field settings.
 3. Run the new installer, or extract the new ZIP to a fresh folder and update any shortcuts to the new executable. Keep the AppData configuration in place.
-4. Open the updated app and confirm `0.1.8` in **About**, then check the saved devices, layouts, profiles, and emergency unlock before enabling routing.
+4. Open the updated app and confirm `0.1.9` in **About**, then check the saved devices, layouts, profiles, and emergency unlock before enabling routing.
 
 Installed and portable copies use the same per-user AppData configuration. Separate ZIP folders do not create separate configuration profiles. If Windows startup is enabled, turn that option off before moving a portable copy, then enable it again from the new location.
 
@@ -74,6 +89,7 @@ In that situation, the cursor should move through the visual layout, not through
 | Safety | Emergency unlock hotkey and button disable routing immediately |
 | Diagnostics | Display detection, runtime status, logs, and validation messages |
 | Display aliases | Name detected displays without changing the Windows IDs used internally |
+| Updates | Installer update check, SHA-256 verification, installation and relaunch |
 | App lifecycle | One instance per Windows user session; tray and repeated-launch window restore |
 | Packaging | Windows x64 installer and portable ZIP from GitHub Actions |
 
@@ -184,11 +200,13 @@ src/
   H2CursorRouter.H2/       NovaStar H2 UDP commands and response parsing
   H2CursorRouter.Windows/  Win32 cursor, monitor topology, hotkeys, and startup
   H2CursorRouter.App/      WPF UI, view models, dialogs, and orchestration
+  H2CursorRouter.Updater/  Release checks, verified download, installer handoff and restart
 
 tests/
   H2CursorRouter.Core.Tests/
   H2CursorRouter.H2.Tests/
   H2CursorRouter.App.Tests/
+  H2CursorRouter.Updater.Tests/
 
 docs/releases/
   v0.1.0.md
@@ -200,6 +218,7 @@ docs/releases/
   v0.1.6.md
   v0.1.7.md
   v0.1.8.md
+  v0.1.9.md
 ```
 
 Development architecture notes, diagrams, test guidance, publishing details, and release checklist are kept in [docs/development.md](docs/development.md).

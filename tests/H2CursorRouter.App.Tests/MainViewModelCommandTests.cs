@@ -16,6 +16,30 @@ namespace H2CursorRouter.App.Tests;
 public sealed class MainViewModelCommandTests
 {
     [Fact]
+    public async Task PrepareForUpdatePersistsLatestDeviceSettings()
+    {
+        using var fixture = new MainViewModelFixture();
+        var viewModel = fixture.Create();
+        viewModel.Devices.Add(new DeviceRow { Id = "retained", Name = "Field device", Host = "127.0.0.1" });
+        await viewModel.PrepareForUpdateAsync();
+        var saved = await new ConfigFileService().LoadAsync(viewModel.ConfigPath);
+        Assert.Equal("Field device", Assert.Single(saved.Devices).Name);
+        Assert.Equal(SafetySettings.Default, saved.Safety);
+    }
+
+    [Fact]
+    public async Task PrepareForUpdateRefusesInvalidSettingsWithoutOverwritingSavedConfig()
+    {
+        using var fixture = new MainViewModelFixture();
+        var viewModel = fixture.Create();
+        await new ConfigFileService().SaveAsync(new AppConfiguration([], [], [], SafetySettings.Default), viewModel.ConfigPath);
+        var original = await File.ReadAllTextAsync(viewModel.ConfigPath);
+        viewModel.Devices.Add(new DeviceRow { Id = "invalid", Host = "" });
+        await Assert.ThrowsAsync<InvalidOperationException>(viewModel.PrepareForUpdateAsync);
+        Assert.Equal(original, await File.ReadAllTextAsync(viewModel.ConfigPath));
+    }
+
+    [Fact]
     public void FacadeCollectionsAreBackedByChildViewModels()
     {
         using var fixture = new MainViewModelFixture();

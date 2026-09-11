@@ -1,9 +1,12 @@
 using System.IO;
 using System.Reflection;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using H2CursorRouter.App.ViewModels;
+using H2CursorRouter.App.Services;
+using H2CursorRouter.Updater;
 using H2CursorRouter.Core.Configuration;
 using H2CursorRouter.Core.Geometry;
 using H2CursorRouter.Core.Validation;
@@ -21,6 +24,7 @@ public partial class App : System.Windows.Application
     private IHotkeyService? _hotkeyService;
     private SingleInstanceService? _singleInstance;
     private bool _activationRequested;
+    private readonly HttpClient _updateHttpClient = new() { Timeout = Timeout.InfiniteTimeSpan };
 
     private async void OnStartup(object sender, StartupEventArgs e)
     {
@@ -76,6 +80,11 @@ public partial class App : System.Windows.Application
 
         var startInTray = e.Args.Any(arg => string.Equals(arg, "--tray", StringComparison.OrdinalIgnoreCase));
         var window = new MainWindow(viewModel, _hotkeyService, startInTray);
+        var preferences = new UpdatePreferences(Path.Combine(GetUserDataDirectory(), "update-settings.json"));
+        var updateRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "vp-cursor-portal", "updates");
+        viewModel.Updates = new UpdateViewModel(new GitHubUpdateClient(_updateHttpClient),
+            new UpdateInstaller(viewModel.PrepareForUpdateAsync, viewModel.ResumeAfterUpdateFailure, window.ExitForUpdate),
+            Assembly.GetExecutingAssembly().GetName().Version!, updateRoot, preferences.Load(), preferences.Save);
         if (!string.IsNullOrWhiteSpace(loadWarning))
         {
             viewModel.AddLog(loadWarning);
@@ -91,6 +100,29 @@ public partial class App : System.Windows.Application
         {
             window.ShowFromTray();
         }
+        if (viewModel.Updates.CheckOnStartup)
+            _ = viewModel.Updates.CheckAsync();
+        CleanOldUpdateDownloads(updateRoot);
+    }
+
+    private static void CleanOldUpdateDownloads(string root)
+    {
+        try
+        {
+            if (!Directory.Exists(root)) return;
+            foreach (var directory in Directory.EnumerateDirectories(root))
+            {
+                if (Guid.TryParseExact(Path.GetFileName(directory), "N", out _) &&
+                    Directory.GetLastWriteTimeUtc(directory) < DateTime.UtcNow.AddDays(-7))
+                {
+                    try { Directory.Delete(directory, recursive: true); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private void RestoreMainWindow()
@@ -109,6 +141,7 @@ public partial class App : System.Windows.Application
             _runtime?.Dispose();
             _hotkeyService?.Dispose();
             _monitorTopology?.Dispose();
+            _updateHttpClient.Dispose();
         }
         finally
         {

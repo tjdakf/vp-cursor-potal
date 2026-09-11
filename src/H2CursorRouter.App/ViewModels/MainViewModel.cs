@@ -39,6 +39,35 @@ public sealed class MainViewModel : ViewModelBase
     private string _lastLoggedMonitorSignature = "";
     private MonitorSnapshot[] _lastLoggedMonitorSnapshot = [];
     private bool _suppressDisplayAliasUpdates;
+    private bool _isUpdating;
+
+    private UpdateViewModel? _updates;
+    public UpdateViewModel? Updates { get => _updates; set => SetProperty(ref _updates, value); }
+
+    public async Task PrepareForUpdateAsync()
+    {
+        _isUpdating = true;
+        await _profileExecutionLock.WaitAsync();
+        try
+        {
+            // Drain in-flight autosaves, then persist the final UI snapshot before exiting.
+            await _configurationSaveLock.WaitAsync();
+            try
+            {
+                var configuration = BuildConfiguration();
+                var validation = _configurationCoordinator.Validate(configuration);
+                ShowValidation(validation);
+                if (!validation.IsValid)
+                    throw new InvalidOperationException("Fix configuration validation errors before installing an update.");
+                await _configurationCoordinator.SaveAsync(configuration, _configPath);
+            }
+            finally { _configurationSaveLock.Release(); }
+            EmergencyUnlock();
+        }
+        finally { _profileExecutionLock.Release(); }
+    }
+
+    public void ResumeAfterUpdateFailure() => _isUpdating = false;
 
     public MainViewModel(
         AppConfiguration configuration,
@@ -588,6 +617,7 @@ public sealed class MainViewModel : ViewModelBase
     private void OnMonitorTopologyChanged(object? sender, EventArgs e) =>
         Dispatch(() =>
         {
+            if (_isUpdating) return;
             RefreshDiagnostics(log: false);
             AddLog("Display topology changed. Display list refreshed.");
         });
@@ -605,9 +635,11 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task ExecuteProfileAsync(ProfileRow profileRow)
     {
+        if (_isUpdating) return;
         await _profileExecutionLock.WaitAsync();
         try
         {
+            if (_isUpdating) return;
             var configuration = BuildConfiguration();
             var profile = profileRow.ToModel();
             await _profileExecutionService.ExecuteAsync(
@@ -1125,6 +1157,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task SaveConfigurationCoreAsync(string? successMessage)
     {
+        if (_isUpdating) return;
         try
         {
             var configuration = BuildConfiguration();
