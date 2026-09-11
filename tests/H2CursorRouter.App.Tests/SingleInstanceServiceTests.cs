@@ -18,7 +18,7 @@ public sealed class SingleInstanceServiceTests
             Assert.True(primary.IsPrimaryInstance);
             primary.StartListening(() => { });
             // A different thread represents another process; mutexes are reentrant on one thread.
-            Assert.False(Task.Run(() =>
+            Assert.False(RunOnDedicatedThread(() =>
             {
                 using var duplicate = new SingleInstanceService(name);
                 return duplicate.IsPrimaryInstance;
@@ -126,6 +126,25 @@ public sealed class SingleInstanceServiceTests
     }
 
     private static string NewInstanceName() => $"vpc-test-{Guid.NewGuid():N}";
+
+    private static Task<T> RunOnDedicatedThread<T>(Func<T> action)
+    {
+        // Synchronously waiting on Task.Run can inline its work on the mutex-owning thread.
+        var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                completion.SetResult(action());
+            }
+            catch (Exception exception)
+            {
+                completion.SetException(exception);
+            }
+        }) { IsBackground = true };
+        thread.Start();
+        return completion.Task;
+    }
 
     private static async Task RequestActivationAsync(string name, CancellationToken cancellationToken)
     {
