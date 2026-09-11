@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private bool _allowExit;
     private bool _isInitialDashboardSelection = true;
     private bool _hideToTrayAfterFirstRender;
+    private bool _restoreRequested;
 
     public MainWindow(MainViewModel viewModel, IHotkeyService hotkeyService, bool startInTray)
     {
@@ -50,7 +51,7 @@ public partial class MainWindow : Window
         InitializeTrayIcon();
         _ = _viewModel.RefreshDashboardStatusAsync();
 
-        if (_startInTray)
+        if (_startInTray && !_restoreRequested)
         {
             _hideToTrayAfterFirstRender = true;
         }
@@ -184,11 +185,17 @@ public partial class MainWindow : Window
         _viewModel.AddLog("Window hidden to tray; routing state is unchanged.");
     }
 
-    private void ShowFromTray()
+    internal void ShowFromTray()
     {
+        _restoreRequested = true;
+        _hideToTrayAfterFirstRender = false;
         ShowInTaskbar = true;
         Show();
-        WindowState = WindowState.Normal;
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
         Activate();
     }
 

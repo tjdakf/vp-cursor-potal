@@ -6,26 +6,46 @@ Windows cursor routing for NovaStar H Series / H2 video-wall layouts.
 
 ## Download
 
-Latest release: [v0.1.7](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.7)
+Latest release: [v0.1.8](https://github.com/tjdakf/vp-cursor-portal/releases/tag/v0.1.8)
 
 | Asset | Use when |
 |---|---|
-| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.7/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
-| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.7/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
+| [`vp-cursor-portal-setup.exe`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.8/vp-cursor-portal-setup.exe) | You want the normal Windows installer under `Program Files` |
+| [`vp-cursor-portal-win-x64.zip`](https://github.com/tjdakf/vp-cursor-portal/releases/download/v0.1.8/vp-cursor-portal-win-x64.zip) | You want a portable self-contained folder |
 
 The installer and executable are not code-signed yet. Microsoft Defender SmartScreen may show an unknown publisher warning.
 
-## What's New In v0.1.7
+## What's New In v0.1.8
 
-This release adds field diagnostics for Windows display remapping without changing routing behavior.
+This release prevents duplicate launches from competing for hotkeys, cursor control, and configuration writes.
 
-- Display refresh logs now include source, target, connector, EDID, friendly name, and monitor device path details when Windows provides them.
-- The app logs possible display remaps when a saved layout rectangle matches a different current `DISPLAYx` name.
-- Runtime refreshes can also log when the same rectangle appears under a different `DISPLAYx` since the previous refresh.
-- Existing layouts, profiles, aliases, and routing behavior are not automatically changed by these diagnostics.
+- Only one instance runs per Windows user session, including installed and portable copies.
+- Launching the app again requests that the existing window reopen, including from the tray or a minimized state.
+- Requests received during startup are retained until the window is ready.
 - Existing `%AppData%\vp-cursor-portal\config.json` files remain compatible.
 
-Full release notes: [docs/releases/v0.1.7.md](docs/releases/v0.1.7.md)
+Full release notes: [docs/releases/v0.1.8.md](docs/releases/v0.1.8.md)
+
+## Install And Update
+
+For a first installation, run `vp-cursor-portal-setup.exe` to install under `Program Files`, or extract the entire portable ZIP and run `vp-cursor-portal.exe` from that folder. Neither download requires a separate .NET runtime installation.
+
+To update an existing installation:
+
+1. Stop routing and choose **Exit** from every running copy's system-tray menu. The window's **X** button only hides it to the tray. Older versions can still run in parallel until you exit them.
+2. Back up `%AppData%\vp-cursor-portal\config.json` if it contains field settings.
+3. Run the new installer, or extract the new ZIP to a fresh folder and update any shortcuts to the new executable. Keep the AppData configuration in place.
+4. Open the updated app and confirm `0.1.8` in **About**, then check the saved devices, layouts, profiles, and emergency unlock before enabling routing.
+
+Installed and portable copies use the same per-user AppData configuration. Separate ZIP folders do not create separate configuration profiles. If Windows startup is enabled, turn that option off before moving a portable copy, then enable it again from the new location.
+
+## Window And Tray Behavior
+
+- **X** hides the window; routing keeps its current state.
+- **Open** or a double-click on the tray icon restores the window.
+- Launching the executable again opens the existing instance instead of starting another controller.
+- **Exit** in the tray menu stops routing and closes the application.
+- If the existing instance cannot receive the open-window request, the new launch shows an already-running message and exits. Open the existing app from the tray.
 
 ## Why This Exists
 
@@ -54,6 +74,7 @@ In that situation, the cursor should move through the visual layout, not through
 | Safety | Emergency unlock hotkey and button disable routing immediately |
 | Diagnostics | Display detection, runtime status, logs, and validation messages |
 | Display aliases | Name detected displays without changing the Windows IDs used internally |
+| App lifecycle | One instance per Windows user session; tray and repeated-launch window restore |
 | Packaging | Windows x64 installer and portable ZIP from GitHub Actions |
 
 ## Cursor Routing Model
@@ -95,6 +116,7 @@ This keeps custom layouts independent from Windows' physical or linear monitor a
 Safety behavior is intentionally conservative:
 
 - Routing starts disabled.
+- Duplicate launches exit before initializing cursor control, hotkeys, or configuration access.
 - Emergency unlock hotkey: `Ctrl+Alt+Shift+Esc`.
 - Emergency unlock is also available from the UI.
 - Monitor topology changes disable routing.
@@ -110,7 +132,7 @@ Safety behavior is intentionally conservative:
 | Target device | NovaStar H Series / H2 reachable over UDP, usually port `6000` |
 | Installed app runtime | None; release artifacts are self-contained |
 | Local development | .NET 10 SDK |
-| Full app build/run | Windows, because the WPF app targets `net10.0-windows` |
+| App execution and full test suite | Windows, because the WPF app targets `net10.0-windows` |
 | Installer build | Inno Setup 6 |
 
 Runtime data is stored per user:
@@ -131,7 +153,7 @@ dotnet test H2CursorRouter.sln
 dotnet run --project src\H2CursorRouter.App\H2CursorRouter.App.csproj
 ```
 
-On non-Windows machines, the WPF app may not build or run. Core and protocol tests can still be run separately when the required .NET SDK is installed:
+The projects enable Windows targeting, so a .NET 10 SDK with Windows reference packs can cross-compile the solution on macOS or Linux. Running the WPF app and the full App test suite still requires Windows. Core and protocol tests run separately on non-Windows machines:
 
 ```bash
 dotnet test tests/H2CursorRouter.Core.Tests/H2CursorRouter.Core.Tests.csproj
@@ -177,6 +199,7 @@ docs/releases/
   v0.1.5.md
   v0.1.6.md
   v0.1.7.md
+  v0.1.8.md
 ```
 
 Development architecture notes, diagrams, test guidance, publishing details, and release checklist are kept in [docs/development.md](docs/development.md).

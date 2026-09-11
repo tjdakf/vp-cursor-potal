@@ -15,14 +15,16 @@ This document keeps the development-oriented material that used to live in the R
 | Cursor model | Polling-based Win32 cursor routing |
 | Packaging | Portable ZIP and Inno Setup installer from GitHub Actions |
 | Config path | `%AppData%\vp-cursor-portal\config.json` |
-| Safety baseline | Routing starts disabled, emergency unlock is always available |
+| Safety baseline | Routing starts disabled; emergency unlock is available in the UI and requests a global hotkey |
+| App lifecycle | One instance per Windows user session, including installed and portable copies |
 
 ## Current MVP Status
 
-`v0.1.7` is prepared from `main`.
+This document describes the `v0.1.8` source and release procedure. See [release notes](releases/v0.1.8.md) for the change summary and validation limits.
 
 | Status | Capability |
 |---|---|
+| Done | Single-instance startup gate and repeated-launch window restore |
 | Done | WPF desktop app targeting `.NET 10` / `net10.0-windows` |
 | Done | Separated Core, H2, Windows, App, and test projects |
 | Done | H2 `W0605` preset load and `R0600` preset enum commands |
@@ -70,6 +72,7 @@ docs/releases/
   v0.1.5.md
   v0.1.6.md
   v0.1.7.md
+  v0.1.8.md
 
 installer/inno/
   vp-cursor-portal.iss
@@ -123,7 +126,7 @@ flowchart TB
 | `H2CursorRouter.Core` | Domain models, geometry, routing decisions, validation, profile planning | WPF, Win32, sockets, real hardware |
 | `H2CursorRouter.H2` | NovaStar H2 UDP JSON commands and responses | UI state and cursor movement |
 | `H2CursorRouter.Windows` | Win32 cursor, monitor topology, hotkeys, startup registration | Business rules that belong in Core |
-| `H2CursorRouter.App` | WPF shell, composition, ViewModels, dialogs, user workflows | Geometry decisions that cannot be tested outside the UI |
+| `H2CursorRouter.App` | WPF shell, composition, single-instance lifecycle, ViewModels, dialogs, user workflows | Geometry decisions that cannot be tested outside the UI |
 | `tests/*` | Behavior coverage around routing, H2, mapping, XAML bindings, log policy | Real H2 devices or real cursor movement |
 
 ### `H2CursorRouter.Core`
@@ -197,7 +200,7 @@ The runtime:
 - clips the cursor only for single-visible-zone layouts,
 - releases clipping on stop, topology change, emergency unlock, and app exit.
 
-Rule: Win32 calls stay in this project. Core logic stays pure and testable.
+Reusable cursor, monitor, hotkey, and startup-registration integration belongs in this project. The App project also contains window-specific native calls for display-identification overlays and foreground activation. Core logic stays pure and testable.
 
 ### `H2CursorRouter.App`
 
@@ -206,10 +209,14 @@ WPF shell, app composition, row view models, dialogs, execution orchestration, a
 Important files:
 
 - `App.xaml.cs`
+  - checks single-instance ownership before creating services or loading configuration,
   - creates Win32/H2 services,
   - loads user config,
   - wires `MainViewModel`,
   - starts monitor topology watching.
+- `SingleInstanceService.cs`
+  - owns the named mutex and named-pipe activation listener,
+  - sends repeated-launch requests to the existing instance.
 - `MainWindow.xaml`
   - dashboard-first WPF UI.
 - `MainWindow.xaml.cs`
@@ -239,6 +246,18 @@ Important files:
 
 `MainViewModel` intentionally remains a facade for existing WPF bindings. New behavior should usually go into a child ViewModel or service first, then be exposed through the facade only when the XAML needs it.
 
+## Single-Instance Startup And Exit
+
+`SingleInstanceService` acquires a named `Local\` mutex before configuration access, monitor watching, hotkey registration, or cursor-runtime creation. Its name includes the Windows user SID and session ID, but not the executable path or version. Installed and portable copies in the same user session therefore share ownership. Separate Windows sessions are outside this guard's scope.
+
+The primary instance starts a current-user-only named-pipe listener. A duplicate launch waits up to five seconds to connect and exchange an activation request. It grants foreground permission to the primary process before sending the request, then exits without initializing the controller. If notification fails, it shows an already-running message and exits anyway.
+
+Activation is dispatched to the WPF thread. Requests arriving before window creation are remembered. Restoring the window cancels any pending startup-to-tray hide, restores a minimized window, and preserves a maximized window's state. Windows may still restrict foreground focus; notification delivery does not itself prove that a user saw the window.
+
+Closing the window with **X** hides it to the tray. **Exit** stops routing, releases hotkeys and monitor watching, stops the pipe listener, and finally releases the mutex. Acquisition and disposal must remain on the application thread because mutex ownership is thread-affine. An abandoned mutex is accepted after an unexpected exit.
+
+This guard is introduced in `v0.1.8`. Exit all older copies before upgrading; an already-running older binary does not participate in the new protocol. Copies in different privilege contexts may fail to exchange activation requests and show the fallback message instead.
+
 ## Runtime Configuration
 
 Runtime data is per-user:
@@ -264,7 +283,7 @@ flowchart TD
 2. optional `config.sample.json` beside the executable, if a developer or tester manually placed one there
 3. built-in empty configuration from `SampleConfiguration.Create()`
 
-Invalid config files are moved aside with an `.invalid-{timestamp}` suffix and the app falls back to the next source.
+When the user config cannot be loaded, the app attempts to move it aside with an `.invalid-{timestamp}` suffix, reports the recovery warning, and falls back to the next source. A failed backup is reported as `backup failed`.
 
 Clean install behavior:
 
@@ -281,7 +300,7 @@ A profile can reference:
 
 | Profile binding | Behavior |
 |---|---|
-| H2 preset only | Send preset command, update H2 status, do not change cursor routing |
+| H2 preset only | Send preset command and update H2 status; success stops routing without clearing the active layout reference, failure preserves existing routing |
 | Cursor layout only | Activate cursor layout and routing without H2 communication |
 | H2 preset + cursor layout | Load preset first, then apply cursor layout if ACK policy allows it |
 
@@ -295,18 +314,17 @@ sequenceDiagram
     participant Routing
 
     User->>App: Execute profile
-    App->>Routing: Stop current routing if needed
-    App->>App: Validate configuration
+    App->>App: Validate configuration (abort if invalid)
     App->>H2: Send W0605 preset load
     H2-->>App: ACK / timeout / error
     alt ACK required and not Ok
-        App->>Routing: Keep layout inactive
-    else ACK Ok or cursor-only allowed
-        App->>App: Wait PostAckDelayMs
-        App->>Routing: Resolve start position
-        App->>Routing: Activate layout
-        App->>Routing: Move cursor to start position
-        App->>Routing: Start polling runtime
+        App->>Routing: Preserve existing routing; do not apply requested layout
+    else ACK Ok or ACK not required
+        App->>App: Wait PostAckDelayMs only after successful ACK
+        App->>App: Resolve requested layout and start position
+        App->>Routing: Stop previous routing and clear layout
+        App->>Routing: Validate and activate requested layout
+        App->>Routing: Move cursor and start polling if valid
     end
 ```
 
@@ -396,7 +414,9 @@ Safety is mandatory.
 - App exit releases routing and clipping.
 - Monitor topology changes disable routing.
 - Invalid layouts are refused.
-- H2 failure prevents cursor-layout activation when ACK is required.
+- H2 failure prevents the requested cursor-layout activation when ACK is required; existing routing is preserved.
+- Duplicate launches must exit before any controller or configuration initialization.
+- A hotkey registration failure is logged; the UI emergency-unlock control remains available.
 
 Do not remove or hide emergency controls from normal operation paths.
 
@@ -418,7 +438,7 @@ dotnet test H2CursorRouter.sln
 dotnet run --project src\H2CursorRouter.App\H2CursorRouter.App.csproj
 ```
 
-On non-Windows machines, the WPF app may not build or run. Validate cross-platform logic directly:
+With Windows reference packs available, `EnableWindowsTargeting` allows solution cross-compilation on non-Windows machines. WPF execution and the full App test suite require Windows. Validate cross-platform logic directly:
 
 ```bash
 dotnet test tests/H2CursorRouter.Core.Tests/H2CursorRouter.Core.Tests.csproj
@@ -497,28 +517,38 @@ The workflow:
 | `vp-cursor-portal-win-x64` | Portable self-contained app folder |
 | `vp-cursor-portal-setup` | Program Files installer |
 
-GitHub Release assets are uploaded only for tags like `v0.1.7`.
+GitHub Release assets are uploaded only for tags like `v0.1.8`.
 
 ## Release Checklist
 
-`v0.1.7` is prepared. Use this checklist to publish and verify the release:
+Automated release checks:
 
-1. Merge the PR branch.
-2. Confirm the latest `Windows Build` workflow passes.
-3. Download and run the installer artifact on a Windows test PC.
-4. Confirm install path, Start Menu shortcut, app launch, and uninstall behavior.
-5. Test emergency unlock before routing field tests.
-6. Confirm existing `%AppData%\vp-cursor-portal\config.json` behavior: keep, migrate, or delete intentionally.
-7. Create and push a version tag, for example:
+1. Review changes and commit only the intended source, tests, docs, and version metadata. Keep field configuration, protocol reference PDFs, and build outputs out of the commit.
+2. Update `Version`, `AssemblyVersion`, and `FileVersion` in the App project, the installer default version, and workflow default/fallback versions together.
+3. Add `docs/releases/<tag>.md` and update README download links and the current development notes. Keep historical release notes as records of their own versions.
+4. Run `git diff --check`, build, and focused tests. Record which tests actually ran and which require Windows.
+5. Push the release commit and confirm its `Windows Build` workflow passes, including the full test suite and installer packaging.
+6. Create and push the new tag on that tested commit, for example:
 
 ```bash
-git tag v0.1.7
-git push origin v0.1.7
+git tag v0.1.8
+git push origin v0.1.8
 ```
 
-The tag workflow creates release assets.
+7. Wait for the tag workflow to succeed. Verify that the published release contains both the installer and ZIP, is marked latest, and that README download links work.
 
-For version tags, the release body is read from `docs/releases/<tag>.md`, for example `docs/releases/v0.1.7.md`.
+Manual Windows/field checks must be recorded separately from automated CI results:
+
+- Install/upgrade, Start Menu shortcut, About version, and uninstall behavior.
+- Normal duplicate launch, minimized window, tray-hidden window, and repeated launch during `--tray` startup.
+- Confirm only one controller remains and that existing routing/configuration is not reset by a duplicate launch.
+- Exit/relaunch and restart after an unexpected process exit.
+- Emergency unlock, H2 communication, and actual multi-monitor routing on the target PC.
+- Preservation of existing `%AppData%\vp-cursor-portal\config.json` during upgrade.
+
+If these manual checks have not been performed, state that in the release notes; a successful workflow does not establish field verification.
+
+For version tags, the release body is read from `docs/releases/<tag>.md`, for example `docs/releases/v0.1.8.md`.
 
 ## Code Signing And SmartScreen
 
@@ -535,7 +565,7 @@ Recommended path:
 | CI integration | Store signing certificate/password as GitHub Actions secrets |
 | Installer build | Sign the app executable and installer during the Windows workflow |
 
-EV certificates usually reduce SmartScreen friction faster, but they cost more and require stricter verification. OV certificates are more common for small projects, but reputation may take time to build.
+Code signing identifies the publisher but does not guarantee removal of SmartScreen warnings for a new build. EV certificates no longer provide an automatic SmartScreen reputation bypass. See [Microsoft SmartScreen guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
 
 ## Development Guidelines
 
@@ -562,7 +592,7 @@ Avoid:
 |---|---|
 | `H2CursorRouter.Core.Tests` | Cursor routing decisions, hidden/outside-zone rejection, portal selection, full-edge and segmented mapping, validation, profile planning |
 | `H2CursorRouter.H2.Tests` | Command serialization, ACK parsing, malformed responses, fake UDP integration cases |
-| `H2CursorRouter.App.Tests` | Row/config mapping, profile execution service, layout editing helpers, monitor-zone matching, XAML binding surface, log retention/noise policy, MainViewModel facade behavior |
+| `H2CursorRouter.App.Tests` | Row/config mapping, profile execution service, layout editing helpers, monitor-zone matching, XAML binding surface, log retention/noise policy, MainViewModel facade behavior, single-instance ownership and activation IPC |
 
 ```mermaid
 flowchart LR
@@ -571,7 +601,10 @@ flowchart LR
     H2Tests["H2 tests"] --> Protocol["UDP JSON protocol"]
     AppTests["App tests"] --> Workflow["UI-facing workflow services"]
     AppTests --> Bindings["XAML binding surface"]
+    AppTests --> Lifecycle["Single-instance ownership and activation IPC"]
 ```
+
+`SingleInstanceServiceTests` covers duplicate rejection, ownership release/recovery, activation requests, startup connection waiting, disconnected clients, and notification timeout. These service tests do not instantiate the WPF window or verify visible foreground focus.
 
 ## License, Notices, And About Tab
 

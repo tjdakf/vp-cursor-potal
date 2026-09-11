@@ -19,9 +19,33 @@ public partial class App : System.Windows.Application
     private CursorRoutingRuntime? _runtime;
     private IMonitorTopologyService? _monitorTopology;
     private IHotkeyService? _hotkeyService;
+    private SingleInstanceService? _singleInstance;
+    private bool _activationRequested;
 
     private async void OnStartup(object sender, StartupEventArgs e)
     {
+        _singleInstance = new SingleInstanceService(SingleInstanceService.GetInstanceName());
+        if (!_singleInstance.IsPrimaryInstance)
+        {
+            var notified = await _singleInstance.NotifyPrimaryAsync(TimeSpan.FromSeconds(5));
+            if (!notified)
+            {
+                System.Windows.MessageBox.Show(
+                    "vp-cursor-portal is already running. Open it from the system tray.",
+                    "vp-cursor-portal",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+
+            Shutdown();
+            return;
+        }
+
+        _singleInstance.StartListening(() =>
+        {
+            _ = Dispatcher.BeginInvoke(new Action(RestoreMainWindow));
+        });
+
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
         var cursorService = new Win32CursorService();
@@ -63,14 +87,35 @@ public partial class App : System.Windows.Application
         }
 
         window.Show();
+        if (_activationRequested)
+        {
+            window.ShowFromTray();
+        }
+    }
+
+    private void RestoreMainWindow()
+    {
+        _activationRequested = true;
+        if (MainWindow is MainWindow window)
+        {
+            window.ShowFromTray();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _runtime?.Dispose();
-        _hotkeyService?.Dispose();
-        _monitorTopology?.Dispose();
-        base.OnExit(e);
+        try
+        {
+            _runtime?.Dispose();
+            _hotkeyService?.Dispose();
+            _monitorTopology?.Dispose();
+        }
+        finally
+        {
+            // Keep ownership until cursor and hotkey cleanup has finished.
+            _singleInstance?.Dispose();
+            base.OnExit(e);
+        }
     }
 
     private static async Task<(AppConfiguration Configuration, string ConfigPath, string? Warning)> LoadConfigurationAsync()
